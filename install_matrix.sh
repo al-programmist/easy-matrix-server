@@ -10,7 +10,7 @@ DOMAIN="broadwall.ru"                 # Ваш домен (без https://)
 MATRIX_DOMAIN="matrix.broadwall.ru" # Мессенджер
 LIVEKIT_DOMAIN="livekit.broadwall.ru" # Element Call
 SYNOPTIC_DOMAIN="synoptic.broadwall.ru" #админка
-EMAIL="admin@example.com"            # Почта для SSL
+EMAIL="al-programmist@yandex.ru"            # Почта для SSL
 #DB_PASS="StrongPass_$(openssl rand -hex 4)" # Пароль для БД (можно оставить авто-генерацию)
 
 # Белый список доменов для федерации.
