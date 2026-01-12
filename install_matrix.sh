@@ -6,8 +6,11 @@
 # ==========================================
 
 # --- НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ (РЕДАКТИРОВАТЬ ЗДЕСЬ) ---
-#DOMAIN="example.com"                 # Ваш домен (без https://)
-#EMAIL="admin@example.com"            # Почта для SSL
+DOMAIN="broadwall.ru"                 # Ваш домен (без https://)
+MATRIX_DOMAIN="matrix.broadwall.ru" # Мессенджер
+LIVEKIT_DOMAIN="livekit.broadwall.ru" # Element Call
+SYNOPTIC_DOMAIN="synoptic.broadwall.ru" #админка
+EMAIL="admin@example.com"            # Почта для SSL
 #DB_PASS="StrongPass_$(openssl rand -hex 4)" # Пароль для БД (можно оставить авто-генерацию)
 
 # Белый список доменов для федерации.
@@ -20,147 +23,184 @@
 # ==========================================
 
 # 1. Генерация ключей
-REG_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-TURN_SECRET=$(openssl rand -base64 32)
-
-echo ">>> НАЧАЛО УСТАНОВКИ ДЛЯ: $DOMAIN"
-echo ">>> БД ПАРОЛЬ: $DB_PASS"
+# REG_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+# TURN_SECRET=$(openssl rand -base64 32)
+# 
+# echo ">>> НАЧАЛО УСТАНОВКИ ДЛЯ: $DOMAIN"
+# echo ">>> БД ПАРОЛЬ: $DB_PASS"
 
 # 2. Подготовка системы
-export DEBIAN_FRONTEND=noninteractive
+#export DEBIAN_FRONTEND=noninteractive
+#
+#apt update -y
+#apt install -y curl wget lsb-release gnupg2 ufw apt-transport-https ca-certificates 
+#
+## 3. Настройка SSH
+#
+#set -e
+#
+#BACKUP_FILE="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
+#cp /etc/ssh/sshd_config "$BACKUP_FILE"
+#
+#cat > /etc/ssh/sshd_config << 'EOF'
+#Port 4741
+#Protocol 2
+#
+#PermitRootLogin no
+#PasswordAuthentication no
+#ChallengeResponseAuthentication no
+#UsePAM yes
+#
+#AllowUsers supervisor
+#DenyUsers root
+#
+#MaxAuthTries 3
+#ClientAliveInterval 300
+#ClientAliveCountMax 2
+#PermitEmptyPasswords no
+#
+#X11Forwarding no
+#PrintMotd no
+#PrintLastLog yes
+#
+#TCPKeepAlive yes
+#AllowTcpForwarding yes
+#
+#PubkeyAuthentication yes
+#AuthorizedKeysFile .ssh/authorized_keys
+#
+#UseDNS no
+#IgnoreRhosts yes
+#HostbasedAuthentication no
+#PermitUserEnvironment no
+#Compression no
+#
+#SyslogFacility AUTH
+#LogLevel INFO
+#
+#AddressFamily any
+#ListenAddress 0.0.0.0
+#ListenAddress ::
+#EOF
+#
+#sshd -t
+#systemctl daemon-reload
+#systemctl restart sshd
+#
+## 4. Настройка Firewall
+#echo ">>> Настройка Firewall..."
+#ufw allow 4741/tcp
+#ufw allow 80/tcp
+#ufw allow 443/tcp
+#ufw allow 8448/tcp
+#ufw allow 3478/tcp
+#ufw allow 3478/udp
+#ufw allow 5349/tcp
+#ufw allow 5349/udp
+#ufw allow 49152:65535/udp
+#ufw allow 50000:60000/tcp
+#ufw --force enable
 
-apt update -y
-apt install -y curl wget lsb-release gnupg2 ufw apt-transport-https ca-certificates 
+#--------------------------------------------------
+# 4. Nginx & Certbot
+echo ">>> Установка Nginx..."
+apt install -y nginx certbot python3-certbot-nginx
+mkdir -p /var/www/html/{matrix.broadwall.ru,synoptic.broadwall.ru,broadwall.ru,livekit.broadwall.ru}
+NGINX_ROOT_DIR="/var/www/html/"
 
-# 3. Настройка SSH
-
-set -e
-
-BACKUP_FILE="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
-cp /etc/ssh/sshd_config "$BACKUP_FILE"
-
-cat > /etc/ssh/sshd_config << 'EOF'
-Port 4741
-Protocol 2
-
-PermitRootLogin no
-PasswordAuthentication no
-ChallengeResponseAuthentication no
-UsePAM yes
-
-AllowUsers supervisor
-DenyUsers root
-
-MaxAuthTries 3
-ClientAliveInterval 300
-ClientAliveCountMax 2
-PermitEmptyPasswords no
-
-X11Forwarding no
-PrintMotd no
-PrintLastLog yes
-
-TCPKeepAlive yes
-AllowTcpForwarding yes
-
-PubkeyAuthentication yes
-AuthorizedKeysFile .ssh/authorized_keys
-
-UseDNS no
-IgnoreRhosts yes
-HostbasedAuthentication no
-PermitUserEnvironment no
-Compression no
-
-SyslogFacility AUTH
-LogLevel INFO
-
-AddressFamily any
-ListenAddress 0.0.0.0
-ListenAddress ::
+# Временный конфиг для получения сертификата#
+cat > /etc/nginx/sites-available/matrix.broadwall.ru <<EOF
+server {
+    server_name $MATRIX_DOMAIN;
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
 EOF
 
-sshd -t
-systemctl daemon-reload
-systemctl restart sshd
+cat > /etc/nginx/sites-available/broadwall.ru <<EOF
+server {
+    server_name $DOMAIN;
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
+EOF
 
-# 4. Настройка Firewall
-echo ">>> Настройка Firewall..."
-ufw allow 4741/tcp
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw allow 8448/tcp
-ufw allow 3478/tcp
-ufw allow 3478/udp
-ufw allow 5349/tcp
-ufw allow 5349/udp
-ufw allow 49152:65535/udp
-ufw allow 50000:60000/tcp
-ufw --force enable
+cat > /etc/nginx/sites-available/livekit.broadwall.ru <<EOF
+server {
+    server_name $LIVEKIT_DOMAIN;
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
+EOF
 
-# 4. Nginx & Certbot
-#echo ">>> Установка Nginx..."
-#apt install -y nginx certbot python3-certbot-nginx
-#
-# Временный конфиг для получения сертификата#
-#cat > /etc/nginx/sites-available/matrix <<EOF#
-#server {#
-#    server_name $DOMAIN;#
-#    listen 80;#
-#    listen [::]:80;#
-#    return 301 https://\$host\$request_uri;
-#}
-#EOF
-#ln -sf /etc/nginx/sites-available/matrix /etc/nginx/sites-enabled/
-#rm -f /etc/nginx/sites-enabled/default
-#systemctl reload nginx
+cat > /etc/nginx/sites-available/synoptic.broadwall.ru <<EOF
+server {
+    server_name $SYNOPTIC_DOMAIN;
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
+EOF
 
-# Получение сертификата
-#echo ">>> Получение SSL сертификата..."
-#certbot certonly --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL
+ln -sf /etc/nginx/sites-available/matrix.broadwall.ru /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/livekit.broadwall.ru /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/synoptic.broadwall.ru /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/broadwall.ru /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+systemctl reload nginx
+
+# Получение сертификатов
+echo ">>> Получение SSL сертификата..."
+certbot certonly --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL
+certbot certonly --nginx -d $LIVEKIT_DOMAIN --non-interactive --agree-tos -m $EMAIL
+certbot certonly --nginx -d $SYNOPTIC_DOMAIN --non-interactive --agree-tos -m $EMAIL
+certbot certonly --nginx -d $MATRIX_DOMAIN --non-interactive --agree-tos -m $EMAIL
 
 # Финальный конфиг Nginx
-#cat > /etc/nginx/sites-available/matrix <<EOF
-#server {
-#    server_name $DOMAIN;
-#    listen 80;
-#    listen [::]:80;
-#    return 301 https://\$host\$request_uri;
-#}
+cat > /etc/nginx/sites-available/matrix.broadwall.ru <<EOF
+server {
+    server_name $MATRIX_DOMAIN;
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
 
-#server {
-#    server_name $DOMAIN;
-#    listen 443 ssl http2;
-#    listen [::]:443 ssl http2;
-#    listen 8448 ssl;
-#    listen [::]:8448 ssl;
-#
-#    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-#    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-#    ssl_protocols TLSv1.2 TLSv1.3;
-#    ssl_prefer_server_ciphers on;
-#
-#    location /.well-known/matrix/client {
-#        add_header Content-Type application/json;
-#        return 200 '{"m.homeserver": {"base_url": "https://$DOMAIN"}}';
-#    }
-#    location /.well-known/matrix/server {
-#        add_header Content-Type application/json;
-#        return 200 '{"m.server": "$DOMAIN:443"}';
-#    }
-#
-#    location ~ ^(/_matrix|/_synapse/client) {
-#        proxy_pass http://localhost:8008;
-#        proxy_http_version 1.1;
-#        proxy_set_header X-Forwarded-For \$remote_addr;
-#        proxy_set_header X-Forwarded-Proto \$scheme;
-#        proxy_set_header Host \$host;
-#        client_max_body_size 50M;
-#    }
-#}
-#EOF
-#systemctl reload nginx
-#
+server {
+    server_name $MATRIX_DOMAIN;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    listen 8448 ssl;
+    listen [::]:8448 ssl;
+
+    ssl_certificate /etc/letsencrypt/live/$MATRIX_DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$MATRIX_DOMAIN/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+    location /.well-known/matrix/client {
+        add_header Content-Type application/json;
+        return 200 '{"m.homeserver": {"base_url": "https://$MATRIX_DOMAIN"}}';
+    }
+    location /.well-known/matrix/server {
+        add_header Content-Type application/json;
+        return 200 '{"m.server": "$MATRIX_DOMAIN:443"}';
+    }
+
+    location ~ ^(/_matrix|/_synapse/client) {
+        proxy_pass http://localhost:8008;
+        proxy_http_version 1.1;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host \$host;
+        client_max_body_size 50M;
+    }
+}
+EOF
+systemctl reload nginx
+
 ## 5. PostgreSQL
 #echo ">>> Установка PostgreSQL..."
 #apt install -y postgresql postgresql-contrib
