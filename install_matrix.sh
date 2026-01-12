@@ -6,9 +6,9 @@
 # ==========================================
 
 # --- НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ (РЕДАКТИРОВАТЬ ЗДЕСЬ) ---
-DOMAIN="example.com"                 # Ваш домен (без https://)
-EMAIL="admin@example.com"            # Почта для SSL
-DB_PASS="StrongPass_$(openssl rand -hex 4)" # Пароль для БД (можно оставить авто-генерацию)
+#DOMAIN="example.com"                 # Ваш домен (без https://)
+#EMAIL="admin@example.com"            # Почта для SSL
+#DB_PASS="StrongPass_$(openssl rand -hex 4)" # Пароль для БД (можно оставить авто-генерацию)
 
 # Белый список доменов для федерации.
 # Если хотите общаться со всеми - оставьте скобки пустыми: WHITELIST_DOMAINS=()
