@@ -22,86 +22,88 @@ EMAIL="al-programmist@yandex.ru"            # Почта для SSL
 # ДАЛЕЕ АВТОМАТИКА (НЕ ТРОГАТЬ)
 # ==========================================
 
-# 1. Генерация ключей
-# REG_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-# TURN_SECRET=$(openssl rand -base64 32)
-# 
-# echo ">>> НАЧАЛО УСТАНОВКИ ДЛЯ: $DOMAIN"
-# echo ">>> БД ПАРОЛЬ: $DB_PASS"
+ 1. Генерация ключей
+ REG_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+ TURN_SECRET=$(openssl rand -base64 32)
+ 
+ echo ">>> НАЧАЛО УСТАНОВКИ ДЛЯ: $DOMAIN"
+ echo ">>> БД ПАРОЛЬ: $DB_PASS"
 
 # 2. Подготовка системы
-#export DEBIAN_FRONTEND=noninteractive
-#
-#apt update -y
-#apt install -y curl wget lsb-release gnupg2 ufw apt-transport-https ca-certificates 
-#
-## 3. Настройка SSH
-#
-#set -e
-#
-#BACKUP_FILE="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
-#cp /etc/ssh/sshd_config "$BACKUP_FILE"
-#
-#cat > /etc/ssh/sshd_config << 'EOF'
-#Port 4741
-#Protocol 2
-#
-#PermitRootLogin no
-#PasswordAuthentication no
-#ChallengeResponseAuthentication no
-#UsePAM yes
-#
-#AllowUsers supervisor
-#DenyUsers root
-#
-#MaxAuthTries 3
-#ClientAliveInterval 300
-#ClientAliveCountMax 2
-#PermitEmptyPasswords no
-#
-#X11Forwarding no
-#PrintMotd no
-#PrintLastLog yes
-#
-#TCPKeepAlive yes
-#AllowTcpForwarding yes
-#
-#PubkeyAuthentication yes
-#AuthorizedKeysFile .ssh/authorized_keys
-#
-#UseDNS no
-#IgnoreRhosts yes
-#HostbasedAuthentication no
-#PermitUserEnvironment no
-#Compression no
-#
-#SyslogFacility AUTH
-#LogLevel INFO
-#
-#AddressFamily any
-#ListenAddress 0.0.0.0
-#ListenAddress ::
-#EOF
-#
-#sshd -t
-#systemctl daemon-reload
-#systemctl restart sshd
-#
-## 4. Настройка Firewall
-#echo ">>> Настройка Firewall..."
-#ufw allow 4741/tcp
-#ufw allow 80/tcp
-#ufw allow 443/tcp
-#ufw allow 8448/tcp
-#ufw allow 3478/tcp
-#ufw allow 3478/udp
-#ufw allow 5349/tcp
-#ufw allow 5349/udp
-#ufw allow 49152:65535/udp
-#ufw allow 50000:60000/tcp
-#ufw --force enable
+export DEBIAN_FRONTEND=noninteractive
+
+apt update -y
+apt install -y curl wget lsb-release gnupg2 ufw apt-transport-https ca-certificates 
+
+# 3. Настройка SSH
+
+set -e
+
+BACKUP_FILE="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
+cp /etc/ssh/sshd_config "$BACKUP_FILE"
+
+cat > /etc/ssh/sshd_config << 'EOF'
+Port 4741
+Protocol 2
+
+PermitRootLogin no
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+
+AllowUsers supervisor
+DenyUsers root
+
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+PermitEmptyPasswords no
+
+X11Forwarding no
+PrintMotd no
+PrintLastLog yes
+
+TCPKeepAlive yes
+AllowTcpForwarding yes
+
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+UseDNS no
+IgnoreRhosts yes
+HostbasedAuthentication no
+PermitUserEnvironment no
+Compression no
+
+SyslogFacility AUTH
+LogLevel INFO
+
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+EOF
+
+sshd -t
+systemctl daemon-reload
+systemctl restart sshd
+
+# 4. Настройка Firewall
+echo ">>> Настройка Firewall..."
+ufw allow 4741/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow 8448/tcp
+ufw allow 3478/tcp
+ufw allow 3478/udp
+ufw allow 5349/tcp
+ufw allow 5349/udp
+ufw allow 49152:65535/udp
+ufw allow 50000:60000/tcp
+ufw --force enable
+#--------------------------------------------------
 
 #--------------------------------------------------
+# 4. Nginx & Certbot
 
 # Массив всех доменов
 DOMAINS=("$DOMAIN" "$MATRIX_DOMAIN" "$LIVEKIT_DOMAIN" "$SYNOPTIC_DOMAIN")
@@ -185,8 +187,7 @@ create_stub_page() {
 EOF
 }
 
-#--------------------------------------------------
-# 4. Nginx & Certbot
+
 echo ">>> Установка Nginx..."
 apt install -y nginx certbot python3-certbot-nginx
 
