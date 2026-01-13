@@ -102,91 +102,184 @@ EMAIL="al-programmist@yandex.ru"            # Почта для SSL
 #ufw --force enable
 
 #--------------------------------------------------
+
+# Массив всех доменов
+DOMAINS=("$DOMAIN" "$MATRIX_DOMAIN" "$LIVEKIT_DOMAIN" "$SYNOPTIC_DOMAIN")
+
+# Функция для создания заглушки
+create_stub_page() {
+    local site_name="$1"
+    local domain="$2"
+    local stub_dir="/var/www/html/$domain"
+    
+    cat > "$stub_dir/index.html" <<EOF
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>$site_name</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            padding: 20px;
+        }
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .status {
+            display: inline-block;
+            background: rgba(76, 175, 80, 0.8);
+            padding: 10px 30px;
+            border-radius: 50px;
+            font-weight: bold;
+            margin: 20px 0;
+            animation: pulse 2s infinite;
+        }
+        .domain {
+            color: #ffeb3b;
+            font-weight: bold;
+            font-size: 1.3rem;
+            margin-top: 10px;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>$site_name</h1>
+        <p>Сервис находится в процессе настройки и скоро будет доступен.</p>
+        <div class="status">● В разработке</div>
+        <p class="domain">Домен: $domain</p>
+    </div>
+</body>
+</html>
+EOF
+}
+
+#--------------------------------------------------
 # 4. Nginx & Certbot
 echo ">>> Установка Nginx..."
 apt install -y nginx certbot python3-certbot-nginx
-mkdir -p /var/www/html/{matrix.broadwall.ru,synoptic.broadwall.ru,broadwall.ru,livekit.broadwall.ru}
-NGINX_ROOT_DIR="/var/www/html/"
 
-# Временный конфиг для получения сертификата#
-cat > /etc/nginx/sites-available/matrix.broadwall.ru <<EOF
+# Создание корневых директорий для всех сайтов
+for domain in "${DOMAINS[@]}"; do
+    mkdir -p "/var/www/html/$domain"
+    
+    # Создаем уникальную заглушку для каждого сайта
+    case "$domain" in
+        "broadwall.ru")
+            create_stub_page "Broadwall Portal" "$domain"
+            ;;
+        "matrix.broadwall.ru")
+            create_stub_page "Matrix Messenger" "$domain"
+            ;;
+        "livekit.broadwall.ru")
+            create_stub_page "Element Call" "$domain"
+            ;;
+        "synoptic.broadwall.ru")
+            create_stub_page "Synoptic Admin" "$domain"
+            ;;
+    esac
+done
+
+# Создание временных конфигов для получения сертификатов
+for domain in "${DOMAINS[@]}"; do
+    cat > "/etc/nginx/sites-available/$domain" <<EOF
 server {
-    server_name $MATRIX_DOMAIN;
+    server_name $domain;
     listen 80;
     listen [::]:80;
-    return 301 https://\$host\$request_uri;
+    
+    # Временный редирект для получения сертификата
+    location /.well-known/acme-challenge/ {
+        root /var/www/html/$domain;
+    }
+    
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
 }
 EOF
+    
+    ln -sf "/etc/nginx/sites-available/$domain" "/etc/nginx/sites-enabled/"
+done
 
-cat > /etc/nginx/sites-available/broadwall.ru <<EOF
-server {
-    server_name $DOMAIN;
-    listen 80;
-    listen [::]:80;
-    return 301 https://\$host\$request_uri;
-}
-EOF
-
-cat > /etc/nginx/sites-available/livekit.broadwall.ru <<EOF
-server {
-    server_name $LIVEKIT_DOMAIN;
-    listen 80;
-    listen [::]:80;
-    return 301 https://\$host\$request_uri;
-}
-EOF
-
-cat > /etc/nginx/sites-available/synoptic.broadwall.ru <<EOF
-server {
-    server_name $SYNOPTIC_DOMAIN;
-    listen 80;
-    listen [::]:80;
-    return 301 https://\$host\$request_uri;
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/matrix.broadwall.ru /etc/nginx/sites-enabled/
-ln -sf /etc/nginx/sites-available/livekit.broadwall.ru /etc/nginx/sites-enabled/
-ln -sf /etc/nginx/sites-available/synoptic.broadwall.ru /etc/nginx/sites-enabled/
-ln -sf /etc/nginx/sites-available/broadwall.ru /etc/nginx/sites-enabled/
+# Удаляем дефолтный конфиг
 rm -f /etc/nginx/sites-enabled/default
 systemctl reload nginx
 
-# Получение сертификатов
-echo ">>> Получение SSL сертификата..."
-certbot certonly --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL
-certbot certonly --nginx -d $LIVEKIT_DOMAIN --non-interactive --agree-tos -m $EMAIL
-certbot certonly --nginx -d $SYNOPTIC_DOMAIN --non-interactive --agree-tos -m $EMAIL
-certbot certonly --nginx -d $MATRIX_DOMAIN --non-interactive --agree-tos -m $EMAIL
+# Получение сертификатов для всех доменов
+echo ">>> Получение SSL сертификатов..."
+for domain in "${DOMAINS[@]}"; do
+    echo "Получение сертификата для $domain..."
+    certbot certonly --nginx -d "$domain" --non-interactive --agree-tos -m "$EMAIL"
+done
 
-# Финальный конфиг Nginx
-cat > /etc/nginx/sites-available/matrix.broadwall.ru <<EOF
+# Создание финальных конфигов
+for domain in "${DOMAINS[@]}"; do
+    if [ "$domain" = "$MATRIX_DOMAIN" ]; then
+        # Специальный конфиг для Matrix
+        cat > "/etc/nginx/sites-available/$domain" <<EOF
 server {
-    server_name $MATRIX_DOMAIN;
+    server_name $domain;
     listen 80;
     listen [::]:80;
     return 301 https://\$host\$request_uri;
 }
 
 server {
-    server_name $MATRIX_DOMAIN;
+    server_name $domain;
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     listen 8448 ssl;
     listen [::]:8448 ssl;
 
-    ssl_certificate /etc/letsencrypt/live/$MATRIX_DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$MATRIX_DOMAIN/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers on;
 
+    root /var/www/html/$domain;
+    index index.html;
+
     location /.well-known/matrix/client {
         add_header Content-Type application/json;
-        return 200 '{"m.homeserver": {"base_url": "https://$MATRIX_DOMAIN"}}';
+        add_header Access-Control-Allow-Origin *;
+        return 200 '{"m.homeserver": {"base_url": "https://$domain"}}';
     }
     location /.well-known/matrix/server {
         add_header Content-Type application/json;
-        return 200 '{"m.server": "$MATRIX_DOMAIN:443"}';
+        add_header Access-Control-Allow-Origin *;
+        return 200 '{"m.server": "$domain:443"}';
     }
 
     location ~ ^(/_matrix|/_synapse/client) {
@@ -197,9 +290,56 @@ server {
         proxy_set_header Host \$host;
         client_max_body_size 50M;
     }
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
 }
 EOF
+    else
+        # Стандартный конфиг для остальных сайтов
+        cat > "/etc/nginx/sites-available/$domain" <<EOF
+server {
+    server_name $domain;
+    listen 80;
+    listen [::]:80;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    server_name $domain;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+
+    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+    root /var/www/html/$domain;
+    index index.html;
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+
+    # Запрещаем доступ к скрытым файлам
+    location ~ /\. {
+        deny all;
+    }
+}
+EOF
+    fi
+done
+
 systemctl reload nginx
+echo ">>> Настройка Nginx завершена!"
+echo ">>> Доступные сайты:"
+for domain in "${DOMAINS[@]}"; do
+    echo "  - https://$domain"
+done
+
+
 
 ## 5. PostgreSQL
 #echo ">>> Установка PostgreSQL..."
