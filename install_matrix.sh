@@ -11,12 +11,12 @@ MATRIX_DOMAIN="matrix.broadwall.ru" # Мессенджер
 LIVEKIT_DOMAIN="livekit.broadwall.ru" # Element Call
 SYNOPTIC_DOMAIN="synoptic.broadwall.ru" #админка
 EMAIL="al-programmist@yandex.ru"            # Почта для SSL
-#DB_PASS="StrongPass_$(openssl rand -hex 4)" # Пароль для БД (можно оставить авто-генерацию)
+DB_PASS="StrongPass_$(openssl rand -hex 4)" # Пароль для БД (можно оставить авто-генерацию)
 
 # Белый список доменов для федерации.
 # Если хотите общаться со всеми - оставьте скобки пустыми: WHITELIST_DOMAINS=()
 # Если только с cupsup.xyz - впишите: WHITELIST_DOMAINS=("abc.xyz")
-# WHITELIST_DOMAINS=("abc.xyz")
+WHITELIST_DOMAINS=()
 
 # ==========================================
 # ДАЛЕЕ АВТОМАТИКА (НЕ ТРОГАТЬ)
@@ -33,6 +33,7 @@ EMAIL="al-programmist@yandex.ru"            # Почта для SSL
 export DEBIAN_FRONTEND=noninteractive
 
 apt update -y
+apt full-upgrade -y
 apt install -y curl wget lsb-release gnupg2 ufw apt-transport-https ca-certificates 
 
 # 3. Настройка SSH
@@ -341,104 +342,103 @@ for domain in "${DOMAINS[@]}"; do
 done
 
 
+# 5. PostgreSQL
+echo ">>> Установка PostgreSQL..."
+apt install -y postgresql postgresql-contrib
+# Создание БД (игнорируем ошибку, если уже есть)
+sudo -u postgres psql -c "CREATE USER synapse WITH PASSWORD '$DB_PASS';" || true
+sudo -u postgres psql -c "CREATE DATABASE synapse OWNER synapse;" || true
+sudo -u postgres psql -c "ALTER USER synapse CREATEDB;" || true
 
-## 5. PostgreSQL
-#echo ">>> Установка PostgreSQL..."
-#apt install -y postgresql postgresql-contrib
-## Создание БД (игнорируем ошибку, если уже есть)
-#sudo -u postgres psql -c "CREATE USER synapse WITH PASSWORD '$DB_PASS';" || true
-#sudo -u postgres psql -c "CREATE DATABASE synapse OWNER synapse;" || true
-#sudo -u postgres psql -c "ALTER USER synapse CREATEDB;" || true
-#
-## 6. Matrix Synapse
-#echo ">>> Установка Matrix Synapse..."
-#wget -O /usr/share/keyrings/matrix-org-archive-keyring.gpg https://packages.matrix.org/debian/matrix-org-archive-keyring.gpg
-#echo "deb [signed-by=/usr/share/keyrings/matrix-org-archive-keyring.gpg] https://packages.matrix.org/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/matrix-org.list
-#apt update
-## Предустановка ответов для инсталлятора
-#echo "matrix-synapse-py3 matrix-synapse/server-name string $DOMAIN" | debconf-set-selections
-#echo "matrix-synapse-py3 matrix-synapse/report-stats boolean false" | debconf-set-selections
-#apt install -y matrix-synapse-py3
-#
-## 7. Настройка Synapse (homeserver.yaml)
-#CONFIG_FILE="/etc/matrix-synapse/homeserver.yaml"
-#
-## Отключаем дефолтную sqlite базу (комментируем строки)
-#sed -i 's/^database:/#database:/' $CONFIG_FILE
-#sed -i 's/^  name: sqlite3/#  name: sqlite3/' $CONFIG_FILE
-#sed -i 's/^  args:/#  args:/' $CONFIG_FILE
-#sed -i 's/^    database: \/var\/lib/#    database: \/var\/lib/' $CONFIG_FILE
-#
-## Добавляем нашу конфигурацию в конец файла
-#cat >> $CONFIG_FILE <<EOF
-#
-## --- AUTO CONFIG V2 ---
-## Включаем регистрацию через API (для админ-скрипта)
-#enable_registration: false
-#enable_registration_without_verification: true
-#registration_shared_secret: "$REG_SECRET"
-#
-## Настройка базы данных Postgres
-#database:
-#  name: psycopg2
-#  args:
-#    user: synapse
-#    password: "$DB_PASS"
-#    database: synapse
-#    host: localhost
-#    cp_min: 5
-#    cp_max: 10
-#  allow_unsafe_locale: true
-#
-## Настройка TURN (Звонки)
-#turn_shared_secret: "$TURN_SECRET"
-#turn_uris: ["turn:$DOMAIN?transport=udp", "turn:$DOMAIN?transport=tcp"]
-#turn_user_lifetime: 86400000
-#turn_allow_ip_lifetime: true
-#EOF
-#
-## Добавляем Whitelist, если задан
-#if [ ${#WHITELIST_DOMAINS[@]} -gt 0 ]; then
-#    echo "federation_domain_whitelist:" >> $CONFIG_FILE
-#    for d in "${WHITELIST_DOMAINS[@]}"; do
-#        echo "  - \"$d\"" >> $CONFIG_FILE
-#    done
-#fi
-#
-## Перезапуск для применения
-#systemctl restart matrix-synapse
-#
-## 8. Coturn (TURN Server)
-#echo ">>> Установка Coturn..."
-#apt install -y coturn
-#
-## Полная перезапись конфига
-#cat > /etc/turnserver.conf <<EOF
-#listening-port=3478
-#tls-listening-port=5349
-#fingerprint
-#use-auth-secret
-#static-auth-secret=$TURN_SECRET
-#realm=$DOMAIN
-#cert=/etc/letsencrypt/live/$DOMAIN/fullchain.pem
-#pkey=/etc/letsencrypt/live/$DOMAIN/privkey.pem
-#no-multicast-peers
-#user-quota=100
-#total-quota=1200
-#syslog
-#no-cli
-#EOF
-#
-## Включаем в /etc/default/coturn
-#sed -i 's/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/' /etc/default/coturn
-#systemctl restart coturn
-#
-#echo "=================================================="
-#echo "УСТАНОВКА ЗАВЕРШЕНА!"
-#echo "=================================================="
-#echo "1. Ваш домен: $DOMAIN"
-#echo "2. Создайте первого пользователя командой ниже:"
-#echo "register_new_matrix_user -c /etc/matrix-synapse/homeserver.yaml http://localhost:8008"
-#echo ""
-#echo "При создании пользователя ответьте 'yes' на вопрос Make admin."
-#echo "=================================================="
+# 6. Matrix Synapse
+echo ">>> Установка Matrix Synapse..."
+wget -O /usr/share/keyrings/matrix-org-archive-keyring.gpg https://packages.matrix.org/debian/matrix-org-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/matrix-org-archive-keyring.gpg] https://packages.matrix.org/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/matrix-org.list
+apt update
+# Предустановка ответов для инсталлятора
+echo "matrix-synapse-py3 matrix-synapse/server-name string $MATRIX_DOMAIN" | debconf-set-selections
+echo "matrix-synapse-py3 matrix-synapse/report-stats boolean false" | debconf-set-selections
+apt install -y matrix-synapse-py3
+
+# 7. Настройка Synapse (homeserver.yaml)
+CONFIG_FILE="/etc/matrix-synapse/homeserver.yaml"
+
+# Отключаем дефолтную sqlite базу (комментируем строки)
+sed -i 's/^database:/#database:/' $CONFIG_FILE
+sed -i 's/^  name: sqlite3/#  name: sqlite3/' $CONFIG_FILE
+sed -i 's/^  args:/#  args:/' $CONFIG_FILE
+sed -i 's/^    database: \/var\/lib/#    database: \/var\/lib/' $CONFIG_FILE
+
+# Добавляем нашу конфигурацию в конец файла
+cat >> $CONFIG_FILE <<EOF
+
+# --- AUTO CONFIG V2 ---
+# Включаем регистрацию через API (для админ-скрипта)
+enable_registration: false
+enable_registration_without_verification: true
+registration_shared_secret: "$REG_SECRET"
+
+# Настройка базы данных Postgres
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    password: "$DB_PASS"
+    database: synapse
+    host: localhost
+    cp_min: 5
+    cp_max: 10
+  allow_unsafe_locale: true
+
+# Настройка TURN (Звонки)
+turn_shared_secret: "$TURN_SECRET"
+turn_uris: ["turn:$MATRIX_DOMAIN?transport=udp", "turn:$MATRIX_DOMAIN?transport=tcp"]
+turn_user_lifetime: 86400000
+turn_allow_ip_lifetime: true
+EOF
+
+# Добавляем Whitelist, если задан
+if [ ${#WHITELIST_DOMAINS[@]} -gt 0 ]; then
+    echo "federation_domain_whitelist:" >> $CONFIG_FILE
+    for d in "${WHITELIST_DOMAINS[@]}"; do
+        echo "  - \"$d\"" >> $CONFIG_FILE
+    done
+fi
+
+# Перезапуск для применения
+systemctl restart matrix-synapse
+
+# 8. Coturn (TURN Server)
+echo ">>> Установка Coturn..."
+apt install -y coturn
+
+# Полная перезапись конфига
+cat > /etc/turnserver.conf <<EOF
+listening-port=3478
+tls-listening-port=5349
+fingerprint
+use-auth-secret
+static-auth-secret=$TURN_SECRET
+realm=$MATRIX_DOMAIN
+cert=/etc/letsencrypt/live/$MATRIX_DOMAIN/fullchain.pem
+pkey=/etc/letsencrypt/live/$MATRIX_DOMAIN/privkey.pem
+no-multicast-peers
+user-quota=100
+total-quota=1200
+syslog
+no-cli
+EOF
+
+# Включаем в /etc/default/coturn
+sed -i 's/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/' /etc/default/coturn
+systemctl restart coturn
+
+echo "=================================================="
+echo "УСТАНОВКА ЗАВЕРШЕНА!"
+echo "=================================================="
+echo "1. Ваш домен: $MATRIX_DOMAIN"
+echo "2. Создайте первого пользователя командой ниже:"
+echo "register_new_matrix_user -c /etc/matrix-synapse/homeserver.yaml http://localhost:8008"
+echo ""
+echo "При создании пользователя ответьте 'yes' на вопрос Make admin."
+echo "=================================================="
